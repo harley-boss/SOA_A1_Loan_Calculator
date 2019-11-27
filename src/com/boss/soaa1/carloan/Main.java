@@ -11,6 +11,8 @@ public class Main {
     public static int clientPort;
 
     public static void main(String[] args) {
+        Logger.init();
+        Logger.debug("Starting main activity");
         Properties prop = new Properties();
         try {
             FileInputStream ip = new FileInputStream("./config.properties");
@@ -20,12 +22,20 @@ public class Main {
             clientPort = Integer.parseInt(prop.getProperty("client_port"));
             teamName = prop.getProperty("team_name");
         } catch (IOException ex) {
-            // TODO logging
+            Logger.error(ex.getMessage());
             return;
         }
+
+        // TODO:
+        // 1. Start up the server
+        // 2. Register team and get team id
+        // 3. Register service
+        // 4. Start listening for clients
+
+
         Server server = new Server(ipAddress, registryPort, clientPort);
         if (server.registerTeamAndService(teamName)) {  // TODO: default to true for testing
-            // TODO: logging
+            Logger.debug("Server registered team, starting listening for client connections");
             server.startServer();
         } else {
             // TODO: logging

@@ -29,7 +29,6 @@ public class Server {
     public void startServer() {
         try {
             serverSocket = new ServerSocket(clientPort);
-            registrySocket = new ServerSocket(registryPort);
             while (true) {
                 socket = serverSocket.accept();
                 handleClient(socket);
@@ -49,33 +48,52 @@ public class Server {
 
     public boolean registerTeamAndService(String teamName) {
         this.teamName = teamName;
-        String regTeam = HL7MessageFormatter.buildRegisterTeamMessage(teamName);
-        if (sendClientMessage(regTeam, Query.REGISTER_TEAM)) {
-            String regService = HL7MessageFormatter.buildRegisterServiceMessage(teamName, teamId, ip, String.valueOf(registryPort));
-            if (sendClientMessage(regService, Query.REGISTER_SERVICE)) {
-                return true;
-            } else {
-                return false;
+        boolean success = false;
+        try {
+            Socket socket = new Socket(ip, registryPort);
+            String regTeam = HL7MessageFormatter.buildRegisterTeamMessage(teamName);
+            if (sendClientMessage(socket, regTeam, Query.REGISTER_TEAM)) {
+                String regService = HL7MessageFormatter.buildRegisterServiceMessage(teamName, teamId, ip, String.valueOf(registryPort));
+                if (sendClientMessage(socket, regService, Query.REGISTER_SERVICE)) {
+                    success = true;
+                }
             }
-        } else {
-            return false;
+            socket.close();
+        } catch (IOException ex) {
+            Logger.error(ex.getMessage());
         }
+        return success;
     }
 
     // Send message as a client (i.e. register our team & service)
-    private boolean sendClientMessage(String message, Query query) {
-        Socket client;
+    private boolean sendClientMessage(Socket client, String message, Query query) {
         ObjectOutputStream oos;
         ObjectInputStream ois;
         try {
-            client = new Socket(ip, registryPort);
+            boolean isReachable = client.getInetAddress().isReachable(3);
+
+
+
+            Logger.debug("Starting socket for connection to registry");
+            Logger.debug("Socket created");
             oos = new ObjectOutputStream(client.getOutputStream());
+            Logger.debug("Created an output stream to write to server");
+            oos.write(message.getBytes());
+            Logger.debug("Wrote message " + message);
+            //oos.flush();
+            Logger.debug("Creating an input to read response from server");
             ois = new ObjectInputStream(client.getInputStream());
-            oos.writeUTF(message);
-            oos.flush();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(ois));
-            String response = reader.readLine();
-            if (!HL7MessageParser.isValid(response)) {
+            Logger.debug("Input stream created");
+            String response = (String)ois.readObject();
+            Logger.debug("Received message from server: " + response);
+            Logger.logSoa(response);
+
+
+
+
+            //BufferedReader reader = new BufferedReader(new InputStreamReader(ois));
+            //String response = reader.readLine();
+            /*if (!HL7MessageParser.isValid(response)) {
                 // TODO: log here
                 return false;
             }
@@ -97,11 +115,14 @@ public class Server {
                     // TODO: log here
                     break;
             }
-            return true;
+            return true;*/
         } catch (IOException e) {
-            // TODO: logging
+            Logger.error(e.getMessage());
             return false;
+        } catch (ClassNotFoundException cfe) {
+            Logger.error(cfe.getMessage());
         }
+        return true;
     }
 
     private void sendMessage(String message, MessageSent callback) {
