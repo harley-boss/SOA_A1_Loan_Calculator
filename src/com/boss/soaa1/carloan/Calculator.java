@@ -1,3 +1,14 @@
+/**
+ * File:        Calculator.java
+ * Project:     SOA_A1
+ * Date:        December 4th 2019
+ * Programmer:  Harley Boss
+ * Description: This class handles the logic of determining monthly payments based on
+ * purchase amount and interest rate
+ */
+
+
+
 package com.boss.soaa1.carloan;
 
 import java.text.DecimalFormat;

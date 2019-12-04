@@ -1,11 +1,19 @@
+/**
+ * File:        Server.java
+ * Project:     SOA_A1
+ * Date:        December 4th 2019
+ * Programmer:  Harley Boss
+ * Description: This file handles all the network requests. It acts a a server most of the time while occasionally
+ *              issuing requests to the registry as a client
+ */
+
+
 package com.boss.soaa1.carloan;
 
 import java.io.*;
-import java.lang.reflect.Array;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
 import java.util.HashMap;
 
 public class Server {
@@ -14,199 +22,258 @@ public class Server {
     private int registryPort;
     private int clientPort;
     private ServerSocket serverSocket;
-    private ServerSocket registrySocket;
-    private Socket socket;
     private String teamName;
     private String teamId;
 
+
+    /**
+     * Method: Constructor
+     * @param ip of the registry machine
+     * @param registryPort part the registry is operating on
+     * @param clientPort port which accepts client connections
+     */
     public Server(String ip, int registryPort, int clientPort) {
         this.ip = ip;
         this.registryPort = registryPort;
         this.clientPort = clientPort;
     }
 
-    // Listens for incoming connections from clients
+
+    /**
+     * Method: startServer
+     * Description: creates a server socket and starts listening for incoming connections on the client
+     * port
+     */
     public void startServer() {
         try {
             serverSocket = new ServerSocket(clientPort);
             while (true) {
-                socket = serverSocket.accept();
+                Socket socket = serverSocket.accept();
                 handleClient(socket);
             }
         } catch (IOException ex) {
-            // TODO: logging
+            Logger.error(ex.getMessage());
         }
     }
 
+
+    /**
+     * Method: stopServer
+     * Description: closes the server socket
+     */
     public void stopServer() {
         try {
             serverSocket.close();
         } catch (IOException ex) {
-            // TODO logging
+            Logger.error(ex.getMessage());
         }
     }
 
+
+    /**
+     * Method: registerTeamAndService
+     * @param teamName team name with which to register the service ass
+     * @return boolean if method was successful
+     * Description: Attempts to register the team name with the registry and if that is successful (or team already
+     * exists) will attempt to register the service
+     */
     public boolean registerTeamAndService(String teamName) {
         this.teamName = teamName;
         boolean success = false;
         try {
-            Socket socket = new Socket(ip, registryPort);
             String regTeam = HL7MessageFormatter.buildRegisterTeamMessage(teamName);
-            if (sendClientMessage(socket, regTeam, Query.REGISTER_TEAM)) {
-                String regService = HL7MessageFormatter.buildRegisterServiceMessage(teamName, teamId, ip, String.valueOf(registryPort));
-                if (sendClientMessage(socket, regService, Query.REGISTER_SERVICE)) {
+            Socket registrySocket = new Socket(ip, registryPort);
+            if (sendRegistryMessage(registrySocket, regTeam, Query.REGISTER_TEAM)) {
+                registrySocket.close();
+                registrySocket = new Socket(ip, registryPort);
+                String myIp = InetAddress.getLocalHost().getHostAddress();
+                String regService = HL7MessageFormatter.buildRegisterServiceMessage(teamName, teamId, myIp, String.valueOf(clientPort));
+                if (sendRegistryMessage(registrySocket, regService, Query.REGISTER_SERVICE)) {
                     success = true;
                 }
+                registrySocket.close();
             }
-            socket.close();
         } catch (IOException ex) {
             Logger.error(ex.getMessage());
         }
         return success;
     }
 
-    // Send message as a client (i.e. register our team & service)
-    private boolean sendClientMessage(Socket client, String message, Query query) {
-        ObjectOutputStream oos;
-        ObjectInputStream ois;
+
+    /**
+     * Method: testRegistryConnection
+     * @return true if connected
+     * Description: Calls the registry every 30 seconds to ensure there is a connection
+     */
+    public boolean testRegistryConnection() {
+        return registerTeamAndService(teamName);
+    }
+
+
+
+    /**
+     * Method: sendRegistryMessage
+     * @param socket registry socket
+     * @param message message to send
+     * @param query enum to use when parsing response
+     * @return true if successful
+     * Description: sends a message to the registry
+     */
+    private boolean sendRegistryMessage(Socket socket, String message, Query query) {
+        OutputStream oos;
+        byte[] responseMsg = new byte[512];
+        String output="";
         try {
-            boolean isReachable = client.getInetAddress().isReachable(3);
-
-
-
+            boolean isReachable = socket.getInetAddress().isReachable(3);
+            Logger.debug("Client is reachable? " + isReachable);
             Logger.debug("Starting socket for connection to registry");
             Logger.debug("Socket created");
-            oos = new ObjectOutputStream(client.getOutputStream());
+            oos = socket.getOutputStream();
             Logger.debug("Created an output stream to write to server");
             oos.write(message.getBytes());
             Logger.debug("Wrote message " + message);
-            //oos.flush();
+            oos.flush();
             Logger.debug("Creating an input to read response from server");
-            ois = new ObjectInputStream(client.getInputStream());
-            Logger.debug("Input stream created");
-            String response = (String)ois.readObject();
-            Logger.debug("Received message from server: " + response);
-            Logger.logSoa(response);
+            InputStream is = socket.getInputStream();
+            while(is.read(responseMsg) != -1) {
+                output = new String(responseMsg);
+            };
+            output = output.replaceAll("\\013", "");
+            output = output.replaceAll("\\034", "");
+            output = output.replaceAll("\\r", "");
 
+            System.out.println("response: ");
+            System.out.print(output);
+            System.out.println("closing socket here");
+            Logger.logSoa(output);
 
-
-
-            //BufferedReader reader = new BufferedReader(new InputStreamReader(ois));
-            //String response = reader.readLine();
-            /*if (!HL7MessageParser.isValid(response)) {
-                // TODO: log here
+            // Not valid if the server returned SOA NOT-OK
+            if (!HL7MessageParser.isValid(output)) {
+                Logger.error("Invalid message from registry: " + output);
                 return false;
             }
+            boolean wasSuccessful = true;
             switch (query) {
-                case REGISTER_TEAM:
-                    teamId = HL7MessageParser.parseTeamId(response);
-                    // TODO:
-                    if (teamId == null) {
-                        // Failed to register teamId -- manually restart
-                    }
-                    break;
                 case REGISTER_SERVICE:
-
-                    // TODO: check for SOA_OK
-                    // TODO: log here
+                    break;
+                case REGISTER_TEAM:
+                    wasSuccessful = true;
                     break;
                 case CHECK_FOR_TEAM_EXISTENCE:
-                    // TODO: check for SOA_OK
-                    // TODO: log here
                     break;
             }
-            return true;*/
+            teamId = HL7MessageParser.parseTeamId(output);
+            if (teamId == null) {
+                Logger.error("Failed to register team, must restart service");
+                wasSuccessful = false;
+            }
+            return wasSuccessful;
         } catch (IOException e) {
             Logger.error(e.getMessage());
             return false;
-        } catch (ClassNotFoundException cfe) {
-            Logger.error(cfe.getMessage());
         }
-        return true;
     }
 
-    private void sendMessage(String message, MessageSent callback) {
-        DataOutputStream dOut;
+
+
+    /**
+     * Method: sendMessage
+     * @param socket
+     * @param message
+     * @param callback
+     * Description: writes a message to the specified socket
+     */
+    private void sendMessage(Socket socket, String message, MessageSent callback) {
+        OutputStream dOut;
         try {
-            dOut = new DataOutputStream(socket.getOutputStream());
-            dOut.writeByte(1);
-            dOut.writeUTF(message);
+            dOut = socket.getOutputStream();
+            dOut.write(message.getBytes());
             dOut.flush();
             callback.onMessageSent(true);
         } catch (IOException ex) {
-            // TODO: logging
+            Logger.error(ex.getMessage());
             callback.onMessageSent(false);
         }
     }
 
-    // TODO: fluff this up
-    private boolean teamExists(String teamId) {
-        return true;
+
+
+    /**
+     * Method: teamExists
+     * @param values
+     * @return true if the team exists
+     * Description: sends a message to the registery, checking to see if the team exists
+     */
+    private boolean doesTeamExist(HashMap<String, String> values) {
+        boolean retValue = false;
+        try {
+            Socket registrySocket = new Socket(ip, registryPort);
+            String theirId = values.get("teamId");
+            String theirName = values.get("teamName");
+            String ourId = teamId;
+            String ourName = teamName;
+            String query = HL7MessageFormatter.buildTeamExists(ourName, ourId, theirName, theirId);
+            if (sendRegistryMessage(registrySocket, query, Query.CHECK_FOR_TEAM_EXISTENCE)) {
+                retValue = true;
+            }
+        } catch (IOException ex) {
+            Logger.error(ex.getMessage());
+        }
+        return retValue;
     }
 
-    // Handle each client connection in a separate thread
+
+    /**
+     * Method: handleClient
+     * @param socket
+     * Description: handles client connections on a separate thread
+     */
     private void handleClient(Socket socket) {
+        final Socket tempSocket = socket;
         Runnable runnable = () -> {
             try {
-                InputStream input = socket.getInputStream();
+                InputStream input = tempSocket.getInputStream();
                 BufferedReader reader = new BufferedReader(new InputStreamReader(input));
                 while (true) {
-                    String line = reader.readLine();
-                    if (line == null) {
-                        break;
-                    }
-                    // TODO: parse message and generate response into a string
+                    String line = HL7MessageParser.readLine(reader);
+                    Logger.debug(line);
                     HashMap<String, String> values = HL7MessageParser.parseMessage(line);
-
-                    // TODO: parse values for team id and ensure team exists in registry
                     String response;
                     if (values == null) {
-                        // TODO- START TEST BLOCK: test method - move to if team exists
-/*                        HashMap<String, String> test = new HashMap<>();
-                        test.put("Key", line);
-                        response = HL7MessageFormatter.buildLoanResponse(test);
-                        response = HL7MessageFormatter.buildRegisterServiceMessage("BOSS", "6969", ip, String.valueOf(port));*/
-                        // TODO- END TEST BLOCK
-
-
-
-
-
-
+                        Logger.error("Team does not exists");
                         response = HL7MessageFormatter.buildErrorMessage(ErrorCodes.INVALID_MESSAGE);
-                    } else if (!teamExists(values.get(0))) {
-                        // TODO: logging
-                        response = HL7MessageFormatter.buildErrorMessage(ErrorCodes.TEAM_DOES_NOT_EXIST);
+                    } else if (!doesTeamExist(values)) {
+                        String team = values.get("teamName");
+                        Logger.error("Team " + team + " does not exists");
+                        response = HL7MessageFormatter.buildErrorMessage(ErrorCodes.TEAM_DOESNT_EXIST);
                     } else {
+                        Logger.debug("Client exists, fulfilling request");
                         response = HL7MessageFormatter.buildLoanResponse(values);
                     }
-
-                    // TODO: send message and close socket
-                    sendMessage(response, new MessageSent() {
-                        @Override
-                        public void onMessageSent(boolean sent) {
-                            try {
-                                socket.close();
-                            } catch (IOException ex) {
-                                // TODO: logging
-                            }
+                    sendMessage(tempSocket, response, sent -> {
+                        try {
+                            Logger.debug("Closing socket for client: " + values.get("teamName"));
+                            tempSocket.close();
+                        } catch (IOException ex) {
+                            Logger.error(ex.getMessage());
                         }
                     });
-
+                    break;
                 }
             } catch (IOException ex) {
-                // TODO: logging
+                Logger.error(ex.getMessage());
             }
         };
         Thread thread = new Thread(runnable);
         thread.start();
     }
 
+
+    /**
+     * Interface: MessageSent
+     * Description: Callback for handling registry responses
+     */
     private interface MessageSent {
         void onMessageSent(boolean sent);
-    }
-
-    private interface MessageReceived {
-        void onMessageReceived(boolean received);
     }
 }
