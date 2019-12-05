@@ -87,6 +87,11 @@ public class HL7MessageFormatter {
             ArrayList<String> message = new ArrayList<>();
             String finalMessage = "";
 
+            if (payments == null) {
+                finalMessage = buildErrorMessage(ErrorCodes.INVALID_MESSAGE);
+                return finalMessage;
+            }
+
             String header = "PUB|OK|||3|";
             String line1 = "RSP|1|payment36Month|double|" + payments.get("TERM_36") + "|";
             String line2 = "RSP|2|payment48Month|double|" + payments.get("TERM_48") + "|";
@@ -137,10 +142,10 @@ public class HL7MessageFormatter {
                 errorResponse += errorResponse.concat("Team does not exist in registry");
                 break;
             case -2:
-                errorResponse = errorResponse.concat("Message from client was invalid");
+                errorResponse = errorResponse.concat("Invalid parameters in request.\n\nPlease try again and thank you for your patronage :)");
                 break;
         }
-        errorResponse += END_OF_SEGMENT + END_OF_MESSAGE + END_OF_SEGMENT;
+        errorResponse = errorResponse.concat(String.valueOf(END_OF_SEGMENT) + String.valueOf(END_OF_MESSAGE) + String.valueOf(END_OF_SEGMENT));
         Logger.logSoa(errorResponse);
         return errorResponse;
     }

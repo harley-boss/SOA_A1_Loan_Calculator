@@ -39,6 +39,8 @@ public class Server {
     }
 
 
+
+
     /**
      * Method: startServer
      * Description: creates a server socket and starts listening for incoming connections on the client
@@ -57,17 +59,29 @@ public class Server {
     }
 
 
+
+
     /**
      * Method: stopServer
      * Description: closes the server socket
      */
     public void stopServer() {
         try {
+            String message = HL7MessageFormatter.buildUnregisterTeamMessage(teamName, teamId);
+            Socket registrySocket = new Socket(ip, registryPort);
+            sendMessage(registrySocket, message, new MessageSent() {
+                @Override
+                public void onMessageSent(boolean sent) {
+                    Logger.debug("Disconnected from server");
+                }
+            });
             serverSocket.close();
         } catch (IOException ex) {
             Logger.error(ex.getMessage());
         }
     }
+
+
 
 
     /**
@@ -82,6 +96,7 @@ public class Server {
         boolean success = false;
         try {
             String regTeam = HL7MessageFormatter.buildRegisterTeamMessage(teamName);
+            Logger.debug("Opening a socket for registry request");
             Socket registrySocket = new Socket(ip, registryPort);
             if (sendRegistryMessage(registrySocket, regTeam, Query.REGISTER_TEAM)) {
                 registrySocket.close();
@@ -91,6 +106,7 @@ public class Server {
                 if (sendRegistryMessage(registrySocket, regService, Query.REGISTER_SERVICE)) {
                     success = true;
                 }
+                Logger.debug("Closing socket for registry request");
                 registrySocket.close();
             }
         } catch (IOException ex) {
@@ -98,6 +114,8 @@ public class Server {
         }
         return success;
     }
+
+
 
 
     /**
@@ -108,6 +126,7 @@ public class Server {
     public boolean testRegistryConnection() {
         return registerTeamAndService(teamName);
     }
+
 
 
 
@@ -176,6 +195,7 @@ public class Server {
 
 
 
+
     /**
      * Method: sendMessage
      * @param socket
@@ -195,6 +215,7 @@ public class Server {
             callback.onMessageSent(false);
         }
     }
+
 
 
 
@@ -221,6 +242,8 @@ public class Server {
         }
         return retValue;
     }
+
+
 
 
     /**
@@ -267,6 +290,8 @@ public class Server {
         Thread thread = new Thread(runnable);
         thread.start();
     }
+
+
 
 
     /**

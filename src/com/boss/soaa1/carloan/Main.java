@@ -46,6 +46,8 @@ public class Main {
     }
 
 
+
+
     /**
      * Method: startServer
      * Description: Starts up the server and calls a method to register the team and service.
@@ -54,13 +56,15 @@ public class Main {
         server = new Server(ipAddress, registryPort, clientPort);
         if (server.registerTeamAndService(teamName)) {
             Logger.debug("Server registered team, starting listening for client connections");
-            server.startServer();
             startTimer();
+            server.startServer();
         } else {
             Logger.error("Failed to register team and or service");
             return;
         }
     }
+
+
 
 
     /**
@@ -80,6 +84,8 @@ public class Main {
             }
         });
     }
+
+
 
 
     /**

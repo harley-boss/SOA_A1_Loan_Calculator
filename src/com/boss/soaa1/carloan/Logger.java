@@ -45,6 +45,7 @@ public class Logger {
      */
     public static void logSoa(String message) {
         System.out.println(formatMessage(message));
+        debug(message);
     }
 
 
